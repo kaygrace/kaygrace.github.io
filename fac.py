@@ -8,12 +8,12 @@ from Pyriod import Pyriod
 import warnings
 warnings.filterwarnings('ignore')
 
-def false_prob_prewhitening(lc, pyriod, cycles):
+def false_amp_old(lc, pyriod, cycles):
     """Determines the false amplitude cutoff of a given periodogram when searching for pulsation periods.
     
-    lc is the lightcurve you created earlier in your notebook
-    pyriod is the pyriod object you created from the lightcurve
-    cycles is the number of cycles you want the program to run for - 1000 cycles means a 1 in 1000 chance of something below the cutoff being a real frequency"""
+    lc is a lightcurve object with time and flux columns
+    pyriod is a pyriod object
+    cycles is the number of cycles you want the program to run for - 1000 cycles corresponds to a <1% chance of something above the cutoff being a false amplitude"""
 
     np.savetxt('tempresiduals.dat', np.vstack((pyriod.lc.time.value,np.array(pyriod.lc.resid.value))).T) # take the time and residuals columns from your lightcurve and save them in a table
 
@@ -49,6 +49,48 @@ def false_prob_prewhitening(lc, pyriod, cycles):
         lc2 = lk.LightCurve(time = time, flux = newflux) # create a new lc with the randomized indices
 
         pg = lc2.to_periodogram(freq_unit = 'microHertz') # create a new periodogram from the new lc with the randomized indices
+        
+        max_amp_array[i] = pg.max_power*1000 # get our units correct for amplitude (make it into mma)
+        
+    return np.mean(max_amp_array) # return the false amplitude probability cutoff, which is the mean of the peak amplitude for however many cycles you asked for
+
+def false_amp_prob(lc, pyriod, cycles):
+    """Determines the false amplitude cutoff of a given periodogram when searching for pulsation periods.
+    
+    lc is a lightcurve object with time and flux columns
+    pyriod is a pyriod object
+    cycles is the number of cycles you want the program to run for - 1000 cycles corresponds to a <1% chance of something above the cutoff being a false amplitude"""
+
+    pyriod_time = np.array(pyriod.lc.time.value)
+
+    pyriod_flux = np.array(pyriod.lc.resid.value)
+    pyriod_flux_shifted = pyriod_flux + 1
+
+    max_amp_array = np.zeros(cycles) # an array to store each calcualted fap in
+    
+    time = np.zeros(len(pyriod_time)) # taking the time column from your residuals array
+    flux = np.zeros(len(pyriod_flux_shifted)) # taking the flux column from your residuals array
+
+    for j in range(len(pyriod_time)): # cleaning up the arrays
+        time[j] = str(pyriod_time[j]) # making time into a string
+        element = str(pyriod_flux_shifted[j]) # making residual flux into a string
+        tempflux = element.split(' ') # getting rid of any units tacked onto residual flux
+
+        # this piece may not be needed anymore but i haven't checked yet
+        if tempflux[0] == '———': # deal with the --- that appears in TESS data sometimes
+            tempflux[0] = np.nan # replace with nan
+
+        flux[j] = tempflux[0] # write the residual flux value to our flux array after dealing with issues like units and ---
+
+    for i in range(cycles): # this is where the monte carlo simulation of it all happens
+
+        newflux = flux
+        
+        random.shuffle(newflux)
+            
+        shuffled_lc = lk.LightCurve(time = time, flux = newflux) # create a new lc with the randomized indices
+
+        pg = shuffled_lc.to_periodogram(freq_unit = 'microHertz') # create a new periodogram from the new lc with the randomized indices
         
         max_amp_array[i] = pg.max_power*1000 # get our units correct for amplitude (make it into mma)
         
